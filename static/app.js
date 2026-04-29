@@ -1,7 +1,5 @@
-/* app.js -- entrypoint for the retail store dashboard frontend.
- *
- * STATIC-MODE: loads data.json once, filters in-memory, no backend needed.
- * Designed for Vercel-style static deployment but also works under FastAPI.
+/* app.js — entrypoint for the retail store dashboard frontend.
+ * STATIC-MODE: loads data.json once, filters in-memory, no backend.
  */
 (function () {
   'use strict';
@@ -35,19 +33,25 @@
     });
   }
 
-  // ---- Data + filtering --------------------------------------------------
-
-  var DATA = null;        // { meta, stores }
-  var ZONE_TO_STATES = {}; // built from meta.zones
+  var DATA = null;
+  var ZONE_TO_STATES = {};
+  var STATE_TO_REGION = {};
 
   function buildZoneIndex(meta) {
     var idx = {};
     if (meta && Array.isArray(meta.zones)) {
-      meta.zones.forEach(function (z) {
-        idx[z.slug] = new Set(z.states || []);
-      });
+      meta.zones.forEach(function (z) { idx[z.slug] = new Set(z.states || []); });
     }
     return idx;
+  }
+  function buildStateToRegion(meta) {
+    var m = {};
+    if (meta && Array.isArray(meta.zones)) {
+      meta.zones.forEach(function (z) {
+        (z.states || []).forEach(function (s) { m[s] = z.display || z.slug; });
+      });
+    }
+    return m;
   }
 
   function filterStores(state) {
@@ -75,6 +79,75 @@
       out.push(s);
     }
     return out;
+  }
+
+  // ---- CSV export --------------------------------------------------------
+
+  function csvEscape(v) {
+    if (v == null) return '';
+    var s = String(v);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function todayStamp() {
+    var d = new Date();
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  function buildCSV(stores) {
+    var headers = ['Retailer', 'Region', 'State', 'Address', 'Zip Code', 'Coordinates'];
+    var lines = [headers.join(',')];
+    for (var i = 0; i < stores.length; i++) {
+      var s = stores[i];
+      var region = STATE_TO_REGION[s.st] || '';
+      var coord = (s.la != null && s.lo != null)
+        ? (Number(s.la).toFixed(6) + ', ' + Number(s.lo).toFixed(6))
+        : '';
+      lines.push([
+        csvEscape(s.ra),
+        csvEscape(region),
+        csvEscape(s.st),
+        csvEscape(s.ad),
+        csvEscape(s.zp),
+        csvEscape(coord),
+      ].join(','));
+    }
+    return '﻿' + lines.join('\n');  // BOM so Excel reads UTF-8 cleanly
+  }
+
+  function downloadCurrent() {
+    var subset = filterStores(currentFilters);
+    if (!subset.length) {
+      showError('No stores in the current filter to download.');
+      return;
+    }
+    var anyFilter = ['retailer','state','zone','cluster'].some(function (k) {
+      return Array.isArray(currentFilters[k]) && currentFilters[k].length > 0;
+    });
+    var csv = buildCSV(subset);
+    var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'stores_' + (anyFilter ? 'filtered' : 'all') + '_' +
+                 todayStamp() + '_' + subset.length + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 100);
+    setStatus('downloaded ' + subset.length.toLocaleString() + ' stores');
+  }
+
+  function wireDownload() {
+    var btn = $('download-csv');
+    if (!btn) return;
+    btn.addEventListener('click', downloadCurrent);
   }
 
   // ---- Bootstrap ---------------------------------------------------------
@@ -106,6 +179,7 @@
 
   function init() {
     wireMobileToggle();
+    wireDownload();
     var clearBtn = $('clear-all');
     if (clearBtn) {
       clearBtn.addEventListener('click', function () {
@@ -124,7 +198,8 @@
       })
       .then(function (payload) {
         DATA = payload;
-        ZONE_TO_STATES = buildZoneIndex(payload.meta);
+        ZONE_TO_STATES   = buildZoneIndex(payload.meta);
+        STATE_TO_REGION  = buildStateToRegion(payload.meta);
         var meta = payload.meta;
         setText('grand-total', meta.total_rows.toLocaleString());
         var schemaEl = $('schema-badge');
@@ -145,8 +220,6 @@
             });
           } catch (e) { showError('Filters init failed: ' + e.message); }
         }
-        // Trigger first render with whatever URL state Filters sees.
-        // Filters.init already calls onChange(urlState) once.
       })
       .catch(function (err) {
         console.error(err);
@@ -166,5 +239,6 @@
     getFilters: function () { return currentFilters; },
     refresh: function () { applyFilters(currentFilters); },
     getData: function () { return DATA; },
+    download: downloadCurrent,
   };
 })();
