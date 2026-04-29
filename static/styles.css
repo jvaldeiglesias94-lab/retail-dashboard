@@ -1,0 +1,47 @@
+/* Custom CSS beyond Tailwind utilities. Keep this file small —
+   prefer Tailwind classes in markup. */
+
+/* Loading spinner used by #loading overlay in index.html */
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #e2e8f0;          /* slate-200 */
+  border-top-color: #0f172a;          /* slate-900 */
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Make sure the deck.gl/MapLibre canvas fills its container.
+   MapLibre requires the container to have an explicit non-auto height. */
+#map,
+#map .maplibregl-map,
+#map canvas {
+  width: 100%;
+  height: 100%;
+}
+
+/* Tailwind's default focus rings are sometimes hidden under deck.gl's canvas.
+   Force them above. */
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid #0f172a;
+  outline-offset: 2px;
+}
+
+/* When mobile drawer is open, allow #filters to scroll within viewport.
+   Tailwind's `hidden`/`flex` toggle is done in app.js. */
+@media (max-width: 767px) {
+  #filters {
+    max-height: 60vh;
+  }
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}

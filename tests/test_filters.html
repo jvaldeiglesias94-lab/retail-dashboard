@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>filters.js — self-contained test harness</title>
+  <style>
+    body { font-family: ui-sans-serif, system-ui, sans-serif; padding: 1rem; }
+    #results { margin-top: 1rem; }
+    .pass { color: #047857; }
+    .fail { color: #b91c1c; font-weight: 600; }
+    pre { background: #f1f5f9; padding: 0.5rem; border-radius: 4px; }
+    .case { padding: 0.4rem 0; border-bottom: 1px solid #e2e8f0; }
+  </style>
+</head>
+<body>
+  <h1>filters.js test harness (slice D)</h1>
+  <p>
+    Loads <code>/static/filters.js</code>, mounts it against a fake meta in
+    detached DOM, and asserts behaviour required by PLAN.md S7 + S11.
+    Each subtest reloads the module/state by calling <code>Filters.init</code>
+    again with a fresh mount point and a manipulated URL.
+  </p>
+
+  <div id="harness" hidden>
+    <!-- Real-shape sidebar so #filters-mount + #clear-all + #status-line exist. -->
+    <aside id="filters">
+      <div id="filters-mount"></div>
+      <button id="clear-all" type="button" disabled>Clear all</button>
+      <p id="status-line">Initializing...</p>
+    </aside>
+    <span id="total-count">--</span>
+    <span id="grand-total">--</span>
+  </div>
+
+  <div id="results"></div>
+
+  <script src="/static/filters.js"></script>
+  <script>
+    // -------- tiny test runner --------
+    const results = document.getElementById("results");
+    let passed = 0;
+    let failed = 0;
+
+    function record(name, ok, detail) {
+      const div = document.createElement("div");
+      div.className = "case " + (ok ? "pass" : "fail");
+      div.textContent = (ok ? "PASS  " : "FAIL  ") + name;
+      if (!ok && detail) {
+        const pre = document.createElement("pre");
+        pre.textContent = detail;
+        div.appendChild(pre);
+      }
+      results.appendChild(div);
+      ok ? passed++ : failed++;
+    }
+
+    function assertEq(actual, expected, msg) {
+      const a = JSON.stringify(actual);
+      const e = JSON.stringify(expected);
+      if (a !== e) throw new Error(msg + " | expected " + e + " got " + a);
+    }
+
+    function delay(ms) {
+      return new Promise((r) => setTimeout(r, ms));
+    }
+
+    // Reset DOM + URL between subtests so they don't leak state.
+    function resetHarness() {
+      const harness = document.getElementById("harness");
+      harness.innerHTML = `
+        <aside id="filters">
+          <div id="filters-mount"></div>
+          <button id="clear-all" type="button" disabled>Clear all</button>
+          <p id="status-line">Initializing...</p>
+        </aside>
+        <span id="total-count">--</span>
+        <span id="grand-total">--</span>
+      `;
+      history.replaceState(null, "", location.pathname);
+    }
+
+    const FAKE_META = {
+      retailers: ["CVS", "Seven Eleven", "Starbucks", "Target Stores", "Walgreens"],
+      states: ["AK", "AL", "CA", "DE", "NY", "TX", "WA"],
+      zones: [
+        { slug: "west_coast", display: "West Coast", states: ["CA", "OR", "WA", "AK", "HI"] },
+        { slug: "northeast", display: "Northeast", states: ["NY", "PA", "NJ"] },
+      ],
+      clusters: ["Chain Drug", "Chain Restaurant", "Convenience", "Mass Merchandiser"],
+      total_rows: 14048,
+    };
+
+    async function runAll() {
+      // ---- Sanity: module loaded ----
+      try {
+        if (!window.Filters || typeof Filters.init !== "function") {
+          throw new Error("Filters global not defined");
+        }
+        record("Filters global is exposed", true);
+      } catch (err) {
+        record("Filters global is exposed", false, err.message);
+        return;
+      }
+
+      // ============================================================
+      // Test 1: init renders 4 selects + fires initial onChange
+      // ============================================================
+      try {
+        resetHarness();
+        const calls = [];
+        const aside = document.getElementById("filters");
+        Filters.init({
+          mountPoint: aside,
+          meta: FAKE_META,
+          onChange: (s) => calls.push(JSON.parse(JSON.stringify(s))),
+        });
+        const sels = aside.querySelectorAll("select[multiple]");
+        assertEq(sels.length, 4, "expected 4 <select multiple>");
+        // Initial onChange fires immediately with all-empty arrays.
+        if (calls.length !== 1) throw new Error("expected 1 initial onChange, got " + calls.length);
+        assertEq(calls[0], { retailer: [], zone: [], state: [], cluster: [] }, "initial state");
+        record("init() renders 4 selects + fires initial onChange", true);
+      } catch (err) {
+        record("init() renders 4 selects + fires initial onChange", false, err.message);
+      }
+
+      // ============================================================
+      // Test 2: changing a select fires onChange with debounced state
+      // ============================================================
+      try {
+        resetHarness();
+        const calls = [];
+        const aside = document.getElementById("filters");
+        Filters.init({
+          mountPoint: aside,
+          meta: FAKE_META,
+          onChange: (s) => calls.push(JSON.parse(JSON.stringify(s))),
+        });
+        // After init we have 1 call (the initial). Now mutate retailer select.
+        const retailerSel = document.getElementById("filter-retailer");
+        const cvsOpt = Array.from(retailerSel.options).find((o) => o.value === "CVS");
+        cvsOpt.selected = true;
+        retailerSel.dispatchEvent(new Event("change"));
+
+        // Within debounce window: no new call yet.
+        await delay(50);
+        if (calls.length !== 1) throw new Error("change fired before debounce expired (calls=" + calls.length + ")");
+
+        // After debounce window:
+        await delay(300);
+        if (calls.length !== 2) throw new Error("expected 2 onChange calls (init + debounce), got " + calls.length);
+        assertEq(calls[1], { retailer: ["CVS"], zone: [], state: [], cluster: [] }, "post-change state");
+
+        // URL reflects the change.
+        const params = new URLSearchParams(location.search);
+        assertEq(params.getAll("retailer"), ["CVS"], "URL retailer");
+        record("change fires onChange after 250ms + updates URL", true);
+      } catch (err) {
+        record("change fires onChange after 250ms + updates URL", false, err.message);
+      }
+
+      // ============================================================
+      // Test 3: rapid changes collapse via debounce
+      // ============================================================
+      try {
+        resetHarness();
+        const calls = [];
+        const aside = document.getElementById("filters");
+        Filters.init({
+          mountPoint: aside,
+          meta: FAKE_META,
+          onChange: (s) => calls.push(JSON.parse(JSON.stringify(s))),
+        });
+        const sel = document.getElementById("filter-retailer");
+        // Fire 5 changes quickly.
+        for (const v of ["CVS", "Walgreens", "Starbucks", "Target Stores", "Seven Eleven"]) {
+          for (const opt of sel.options) opt.selected = (opt.value === v);
+          sel.dispatchEvent(new Event("change"));
+          await delay(20);
+        }
+        await delay(350);
+        // 1 initial + 1 debounced = 2 total.
+        if (calls.length !== 2) throw new Error("debounce did not collapse: calls=" + calls.length);
+        assertEq(calls[1].retailer, ["Seven Eleven"], "final retailer");
+        record("rapid changes collapse via 250ms debounce", true);
+      } catch (err) {
+        record("rapid changes collapse via 250ms debounce", false, err.message);
+      }
+
+      // ============================================================
+      // Test 4: Clear all resets selections + URL + fires onChange
+      // ============================================================
+      try {
+        resetHarness();
+        const calls = [];
+        const aside = document.getElementById("filters");
+        Filters.init({
+          mountPoint: aside,
+          meta: FAKE_META,
+          onChange: (s) => calls.push(JSON.parse(JSON.stringify(s))),
+        });
+        const sel = document.getElementById("filter-retailer");
+        Array.from(sel.options).find((o) => o.value === "CVS").selected = true;
+        sel.dispatchEvent(new Event("change"));
+        await delay(300);
+        // Now click Clear all.
+        document.getElementById("clear-all").click();
+        // Clear all fires immediately (no debounce).
+        if (calls.length < 3) throw new Error("clear-all did not fire onChange (calls=" + calls.length + ")");
+        const last = calls[calls.length - 1];
+        assertEq(last, { retailer: [], zone: [], state: [], cluster: [] }, "post-clear state");
+        // URL is empty.
+        if (location.search && location.search !== "?") {
+          throw new Error("URL not cleared: " + location.search);
+        }
+        // Selections are empty.
+        const stillSelected = Array.from(sel.selectedOptions).map((o) => o.value);
+        assertEq(stillSelected, [], "select selections empty");
+        record("Clear all resets selections + URL + fires onChange", true);
+      } catch (err) {
+        record("Clear all resets selections + URL + fires onChange", false, err.message);
+      }
+
+      // ============================================================
+      // Test 5: Initial load with ?retailer=CVS pre-populates selection
+      // ============================================================
+      try {
+        resetHarness();
+        history.replaceState(null, "", location.pathname + "?retailer=CVS&zone=west_coast");
+        const calls = [];
+        const aside = document.getElementById("filters");
+        Filters.init({
+          mountPoint: aside,
+          meta: FAKE_META,
+          onChange: (s) => calls.push(JSON.parse(JSON.stringify(s))),
+        });
+        // Pre-population should be reflected in initial onChange.
+        if (calls.length !== 1) throw new Error("expected 1 initial call, got " + calls.length);
+        assertEq(calls[0], { retailer: ["CVS"], zone: ["west_coast"], state: [], cluster: [] }, "initial URL state");
+        // Selects show those values.
+        const r = document.getElementById("filter-retailer");
+        const z = document.getElementById("filter-zone");
+        assertEq(Array.from(r.selectedOptions).map((o) => o.value), ["CVS"], "retailer select values");
+        assertEq(Array.from(z.selectedOptions).map((o) => o.value), ["west_coast"], "zone select values");
+        record("initial load with ?retailer=CVS pre-populates filters", true);
+      } catch (err) {
+        record("initial load with ?retailer=CVS pre-populates filters", false, err.message);
+      }
+
+      // ============================================================
+      // Test 6: setFilteredCount updates live counter
+      // ============================================================
+      try {
+        resetHarness();
+        const aside = document.getElementById("filters");
+        Filters.init({ mountPoint: aside, meta: FAKE_META, onChange: () => {} });
+        Filters.setFilteredCount(1234);
+        const live = document.getElementById("filtered-count");
+        if (!live) throw new Error("#filtered-count missing");
+        if (live.textContent !== (1234).toLocaleString()) {
+          throw new Error("filtered-count not updated, got: " + live.textContent);
+        }
+        record("setFilteredCount updates #filtered-count live", true);
+      } catch (err) {
+        record("setFilteredCount updates #filtered-count live", false, err.message);
+      }
+
+      // ============================================================
+      // Summary
+      // ============================================================
+      const summary = document.createElement("h2");
+      summary.textContent = `${passed} passed, ${failed} failed`;
+      summary.className = failed === 0 ? "pass" : "fail";
+      results.appendChild(summary);
+      // Tag a global so headless drivers can poll.
+      window.__testResults = { passed, failed };
+    }
+
+    runAll();
+  </script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Retail Store Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/deck.gl@9.0.33/dist.min.js"></script>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body class="h-screen w-screen overflow-hidden bg-slate-50 text-slate-800 antialiased">
+  <div id="loading" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm" role="status" aria-live="polite">
+    <div class="flex flex-col items-center gap-3 rounded-lg bg-white/95 px-6 py-5 shadow-lg">
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="text-sm font-medium text-slate-700">Loading stores</p>
+    </div>
+  </div>
+
+  <div class="flex h-full w-full flex-col">
+    <header class="flex shrink-0 items-center justify-between gap-4 border-b border-slate-200 bg-white px-4 py-3 shadow-sm">
+      <div class="flex items-center gap-3">
+        <h1 class="text-lg font-semibold tracking-tight md:text-xl">Retail Store Dashboard</h1>
+        <span id="schema-badge" class="hidden rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-500 md:inline-block"></span>
+      </div>
+      <div class="flex items-center gap-3 text-sm">
+        <span class="hidden text-slate-500 sm:inline">stores shown:</span>
+        <span id="counter" class="rounded-md bg-slate-900 px-2.5 py-1 font-mono text-white">
+          <span id="total-count">--</span>
+          <span class="text-slate-400">/</span>
+          <span id="grand-total">--</span>
+        </span>
+        <button id="mobile-toggle" class="rounded border border-slate-300 px-2 py-1 text-xs md:hidden" aria-label="Toggle filters" aria-controls="filters" aria-expanded="false">Filters</button>
+      </div>
+    </header>
+
+    <div class="flex min-h-0 flex-1 flex-col md:flex-row">
+      <aside id="filters" class="hidden w-full shrink-0 flex-col gap-4 overflow-y-auto border-b border-slate-200 bg-white p-4 md:flex md:w-80 md:border-b-0 md:border-r" aria-label="Filters">
+        <div id="filters-mount" class="flex flex-col gap-4">
+          <p class="text-sm text-slate-500">Loading filters...</p>
+        </div>
+        <div class="mt-auto flex flex-col gap-2 border-t border-slate-200 pt-3">
+          <button id="clear-all" type="button" class="w-full rounded bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-50" disabled>Clear all</button>
+          <p id="status-line" class="text-center text-xs text-slate-400">Initializing...</p>
+        </div>
+      </aside>
+
+      <main class="relative min-h-0 flex-1">
+        <div id="map" class="absolute inset-0"></div>
+        <div id="error-banner" class="pointer-events-none absolute left-1/2 top-3 z-40 hidden -translate-x-1/2 rounded bg-red-600 px-3 py-2 text-sm text-white shadow-lg" role="alert"></div>
+      </main>
+    </div>
+  </div>
+
+  <script src="map.js" defer></script>
+  <script src="filters.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>

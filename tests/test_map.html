@@ -1,0 +1,94 @@
+<!doctype html>
+<!--
+  test_map.html — external-feedback hook for slice C (map.js).
+  Loads CDN deps, mounts MapViz with a synthetic 80k-store dataset,
+  then asserts window.__pinCount === 80000. Drop a synthetic dataset
+  at /tmp/synth_stores.json (or generate inline below) and serve from
+  the dashboard root, e.g. `python3 -m http.server 8003 --directory .`,
+  then open http://localhost:8003/tests/test_map.html.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>MapViz test harness</title>
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.css">
+  <script src="https://unpkg.com/maplibre-gl@4.5.0/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/deck.gl@9.0.27/dist.min.js"></script>
+  <script src="../static/map.js"></script>
+  <style>
+    html, body { margin: 0; height: 100%; }
+    #map { position: absolute; inset: 0; }
+    #log {
+      position: absolute; top: 8px; left: 8px; z-index: 10;
+      background: rgba(255,255,255,.9); padding: 8px 10px;
+      font: 12px/1.4 system-ui, sans-serif; border-radius: 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <pre id="log">booting...</pre>
+  <script>
+    const log = (...a) => {
+      const el = document.getElementById('log');
+      el.textContent += '\n' + a.map(x => typeof x === 'string' ? x : JSON.stringify(x)).join(' ');
+      console.log(...a);
+    };
+
+    const CLUSTERS = ['Chain Drug', 'Chain Restaurant', 'Convenience', 'Mass Merchandiser'];
+    function synthStores(n) {
+      const out = new Array(n);
+      for (let i = 0; i < n; i++) {
+        // CONUS-ish bbox: lon [-125, -66], lat [24, 50]
+        const lo = -125 + Math.random() * 59;
+        const la =   24 + Math.random() * 26;
+        const cl = CLUSTERS[i % CLUSTERS.length];
+        out[i] = {
+          id: 'synth-' + i,
+          ra: 'Synth Retailer ' + (i % 5),
+          ct: cl,
+          ad: i + ' Test St',
+          ci: 'Testville',
+          st: 'TX',
+          zp: '00000',
+          la: la,
+          lo: lo,
+          cl: cl,
+          gm: 'https://www.google.com/maps/search/?api=1&query=' + la + ',' + lo
+        };
+      }
+      return out;
+    }
+
+    async function main() {
+      log('libs:', typeof maplibregl, typeof deck, typeof MapViz);
+      MapViz.init({ container: 'map' });
+      log('init ok');
+
+      // Try to fetch precomputed dataset, else synth in-browser.
+      let stores;
+      try {
+        const r = await fetch('/tmp/synth_stores.json');
+        if (r.ok) stores = await r.json();
+      } catch (e) { /* fallback below */ }
+      if (!stores) {
+        log('generating 80k synthetic stores...');
+        stores = synthStores(80000);
+      }
+
+      const t0 = performance.now();
+      MapViz.update(stores);
+      const t1 = performance.now();
+      log('update() wall:', (t1 - t0).toFixed(1), 'ms');
+      log('window.__pinCount =', window.__pinCount);
+      log('window.__lastUpdateMs =', window.__lastUpdateMs && window.__lastUpdateMs.toFixed(1));
+
+      const ok = window.__pinCount === 80000;
+      log(ok ? 'PASS: __pinCount === 80000' : 'FAIL: __pinCount !== 80000');
+      window.__testPassed = ok;
+    }
+    main().catch(e => log('ERROR:', e.message));
+  </script>
+</body>
+</html>
