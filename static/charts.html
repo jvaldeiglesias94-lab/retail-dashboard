@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Retail Dashboard — Charts</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body class="min-h-screen bg-slate-50 text-slate-800 antialiased">
+  <header class="sticky top-0 z-10 bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between shadow-sm">
+    <div class="flex items-center gap-4">
+      <a href="/" class="rounded border border-slate-300 px-3 py-1 text-sm font-medium hover:bg-slate-100">← Map</a>
+      <h1 class="text-xl font-semibold">Retail Charts</h1>
+      <span id="schema-badge" class="hidden rounded bg-slate-100 px-2 py-0.5 text-xs text-slate-500"></span>
+    </div>
+    <div class="flex items-center gap-3 text-sm">
+      <span class="text-slate-500">total:</span>
+      <span id="total-count" class="rounded-md bg-slate-900 px-2.5 py-1 font-mono text-white">--</span>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto p-6 space-y-6">
+    <div id="loading" class="text-center text-slate-500 py-12">Loading data…</div>
+
+    <!-- KPI tiles -->
+    <section id="kpi-section" class="hidden grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="rounded-lg bg-white border border-slate-200 p-4">
+        <div class="text-xs uppercase tracking-wide text-slate-500">Total stores</div>
+        <div id="kpi-stores" class="mt-1 text-3xl font-bold text-slate-900">--</div>
+      </div>
+      <div class="rounded-lg bg-white border border-slate-200 p-4">
+        <div class="text-xs uppercase tracking-wide text-slate-500">Brands</div>
+        <div id="kpi-brands" class="mt-1 text-3xl font-bold text-slate-900">--</div>
+      </div>
+      <div class="rounded-lg bg-white border border-slate-200 p-4">
+        <div class="text-xs uppercase tracking-wide text-slate-500">States covered</div>
+        <div id="kpi-states" class="mt-1 text-3xl font-bold text-slate-900">--</div>
+      </div>
+      <div class="rounded-lg bg-white border border-slate-200 p-4">
+        <div class="text-xs uppercase tracking-wide text-slate-500">ML Clusters</div>
+        <div id="kpi-clusters" class="mt-1 text-3xl font-bold text-slate-900">--</div>
+      </div>
+    </section>
+
+    <!-- Per-cluster cards -->
+    <section id="cluster-cards-section" class="hidden">
+      <h2 class="text-lg font-semibold mb-3">ML Clusters — rollout ranking</h2>
+      <div id="cluster-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </section>
+
+    <!-- Bar charts row -->
+    <section id="charts-section" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div class="rounded-lg bg-white border border-slate-200 p-4">
+        <h3 class="text-sm font-semibold text-slate-700 mb-2">Stores per ML cluster (rollout rank)</h3>
+        <div class="h-72"><canvas id="chart-cluster"></canvas></div>
+      </div>
+      <div class="rounded-lg bg-white border border-slate-200 p-4">
+        <h3 class="text-sm font-semibold text-slate-700 mb-2">Stores per region (zone)</h3>
+        <div class="h-72"><canvas id="chart-zone"></canvas></div>
+      </div>
+      <div class="rounded-lg bg-white border border-slate-200 p-4 lg:col-span-2">
+        <h3 class="text-sm font-semibold text-slate-700 mb-2">Top 20 brands</h3>
+        <div class="h-96"><canvas id="chart-brands"></canvas></div>
+      </div>
+      <div class="rounded-lg bg-white border border-slate-200 p-4 lg:col-span-2">
+        <h3 class="text-sm font-semibold text-slate-700 mb-2">Class of trade × Cluster (stacked)</h3>
+        <div class="h-96"><canvas id="chart-stacked"></canvas></div>
+      </div>
+    </section>
+
+    <!-- State table -->
+    <section id="state-section" class="hidden rounded-lg bg-white border border-slate-200 p-4">
+      <h2 class="text-sm font-semibold text-slate-700 mb-2">Stores by state (sortable)</h2>
+      <div class="overflow-auto max-h-[600px]">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-100 sticky top-0">
+            <tr>
+              <th class="px-3 py-2 text-left cursor-pointer" data-sort="state">State</th>
+              <th class="px-3 py-2 text-right cursor-pointer" data-sort="count">Stores</th>
+              <th class="px-3 py-2 text-left">Top retailer</th>
+              <th class="px-3 py-2 text-right">Top retailer count</th>
+            </tr>
+          </thead>
+          <tbody id="state-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="charts.js" defer></script>
+</body>
+</html>
