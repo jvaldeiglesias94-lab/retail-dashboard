@@ -66,6 +66,11 @@ def load_stores() -> pd.DataFrame:
             df[col] = df[col].astype("string")
     df["zone"] = df["state"].map(STATE_TO_ZONE).astype("string")
     df["cluster"] = df["class_of_trade"]
+    # ML cluster columns (added by Phase 7). Optional - if absent, leave as NA.
+    if "cluster_id" in df.columns:
+        df["cluster_id"] = pd.to_numeric(df["cluster_id"], errors="coerce").astype("Int64")
+    if "cluster_rank" in df.columns:
+        df["cluster_rank"] = pd.to_numeric(df["cluster_rank"], errors="coerce").astype("Int64")
     df["id"] = (
         df["retail_account"].fillna("?") + "|"
         + df["address"].fillna("?") + "|"
@@ -126,7 +131,7 @@ def stores_to_records(df: pd.DataFrame, limit: int) -> list[dict]:
         sub = sub.head(limit)
     out: list[dict] = []
     for row in sub.itertuples(index=False):
-        out.append({
+        rec = {
             "id": row.id,
             "ra": row.retail_account,
             "ct": row.class_of_trade,
@@ -138,7 +143,15 @@ def stores_to_records(df: pd.DataFrame, limit: int) -> list[dict]:
             "lo": float(row.longitude),
             "cl": row.cluster,
             "gm": row.google_maps_url,
-        })
+        }
+        # ML cluster fields if present
+        cid = getattr(row, "cluster_id", None)
+        crk = getattr(row, "cluster_rank", None)
+        if cid is not None and pd.notna(cid):
+            rec["mc"] = int(cid)
+        if crk is not None and pd.notna(crk):
+            rec["mr"] = int(crk)
+        out.append(rec)
     return out
 
 
@@ -160,11 +173,25 @@ def stats_by(df: pd.DataFrame, dimension: str) -> dict[str, int]:
 @lru_cache(maxsize=1)
 def get_meta() -> dict:
     df = load_stores()
+    # Load ML cluster metadata if available (built by Phase 7 of analysis pipeline)
+    ml_clusters = []
+    try:
+        import json as _json
+        meta_path = "/sessions/brave-loving-euler/mnt/projects/analysis/cluster_meta.json"
+        if not os.path.exists(meta_path):
+            meta_path = r"C:\projects\analysis\cluster_meta.json"
+        with open(meta_path, "r", encoding="utf-8") as f:
+            cm = _json.load(f)
+        ml_clusters = sorted(cm.values(), key=lambda x: x.get("rank", 99))
+    except Exception:
+        pass
+
     return {
         "retailers": sorted(df["retail_account"].dropna().unique().tolist()),
         "states": sorted(df["state"].dropna().unique().tolist()),
         "zones": ZONES,
         "clusters": sorted(df["cluster"].dropna().unique().tolist()),
+        "ml_clusters": ml_clusters,
         "total_rows": int(len(df)),
         "schema_version": SCHEMA_VERSION,
     }

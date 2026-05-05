@@ -7,12 +7,13 @@
   'use strict';
 
   const DEBOUNCE_MS = 250;
-  const FILTER_KEYS = ['retailer', 'zone', 'state', 'cluster'];
+  const FILTER_KEYS = ['retailer', 'zone', 'state', 'cluster', 'ml_cluster'];
   const FILTER_LABELS = {
     retailer: 'Retailer',
     zone: 'Zone',
     state: 'State',
-    cluster: 'Cluster',
+    cluster: 'Class of Trade',
+    ml_cluster: 'ML Cluster (rollout rank)',
   };
 
   // Per-key registry: { value: HTMLInputElement(checkbox) }
@@ -113,26 +114,39 @@
 
     // scrollable checkbox list
     const list = doc.createElement('div');
-    list.className = 'max-h-44 overflow-y-auto rounded border border-slate-200 bg-white p-2 ' +
+    const maxH = (key === 'ml_cluster') ? 'max-h-96' : 'max-h-44';
+    list.className = maxH + ' overflow-y-auto rounded border border-slate-200 bg-white p-2 ' +
                      'flex flex-col gap-1';
 
     checkboxes[key] = Object.create(null);
     for (const opt of options) {
-      const value = (opt && typeof opt === 'object') ? String(opt.value) : String(opt);
-      const text  = (opt && typeof opt === 'object') ? (opt.label || value) : value;
+      const value  = (opt && typeof opt === 'object') ? String(opt.value) : String(opt);
+      const text   = (opt && typeof opt === 'object') ? (opt.label || value) : value;
+      const detail = (opt && typeof opt === 'object') ? opt.detail : null;
 
       const row = doc.createElement('label');
-      row.className = 'flex items-center gap-2 cursor-pointer text-sm hover:bg-slate-50 rounded px-1';
+      row.className = 'flex items-start gap-2 cursor-pointer text-sm hover:bg-slate-50 rounded px-1 py-0.5';
 
       const cb = doc.createElement('input');
       cb.type = 'checkbox';
       cb.value = value;
-      cb.className = 'h-4 w-4 cursor-pointer';
+      cb.className = 'h-4 w-4 cursor-pointer mt-0.5';
       cb.addEventListener('change', () => scheduleChange());
 
       const span = doc.createElement('span');
-      span.textContent = text;
-      span.className = 'text-slate-700';
+      span.className = 'text-slate-700 flex-1';
+      if (detail) {
+        const labelLine = doc.createElement('div');
+        labelLine.textContent = text;
+        labelLine.className = 'font-medium';
+        const detailDiv = doc.createElement('div');
+        detailDiv.className = 'text-xs text-slate-500 leading-snug whitespace-pre-line mt-0.5';
+        detailDiv.textContent = detail;
+        span.appendChild(labelLine);
+        span.appendChild(detailDiv);
+      } else {
+        span.textContent = text;
+      }
 
       row.appendChild(cb);
       row.appendChild(span);
@@ -151,7 +165,26 @@
     const zones = Array.isArray(meta && meta.zones)
       ? meta.zones.map(z => ({ value: z.slug, label: z.display || z.slug }))
       : [];
-    return { retailer: retailers, zone: zones, state: states, cluster: clusters };
+    // ML clusters: each option's value = rank (string), label = "Rank N — region label"
+    const ml_clusters = Array.isArray(meta && meta.ml_clusters)
+      ? meta.ml_clusters.map(c => {
+          const fmtN = n => (n >= 1000 ? (n/1000).toFixed(n >= 10000 ? 0 : 1) + 'k' : String(n));
+          const ts = Object.entries(c.top_states || {}).slice(0, 5)
+            .map(([s, n]) => s + ' (' + fmtN(n) + ')').join(', ');
+          const tb = Object.entries(c.top_brands || {}).slice(0, 5)
+            .map(([b, n]) => b + ' (' + fmtN(n) + ')').join(', ');
+          const port = c.nearest_port + ' (~' + Math.round(c.mean_port_dist_km) + ' km)';
+          const detail = c.size.toLocaleString() + ' stores · port: ' + port +
+                         '\nTop states: ' + ts +
+                         '\nTop brands: ' + tb;
+          return {
+            value: String(c.rank),
+            label: 'Rank ' + c.rank + ' — ' + (c.label || ('cluster ' + c.cluster_id)),
+            detail: detail,
+          };
+        })
+      : [];
+    return { retailer: retailers, zone: zones, state: states, cluster: clusters, ml_cluster: ml_clusters };
   }
 
   function ensureFilteredCountEl(mountPoint) {

@@ -60,6 +60,9 @@
     var ra = (state.retailer && state.retailer.length) ? new Set(state.retailer) : null;
     var st = (state.state    && state.state.length)    ? new Set(state.state)    : null;
     var cl = (state.cluster  && state.cluster.length)  ? new Set(state.cluster)  : null;
+    var mc = (state.ml_cluster && state.ml_cluster.length)
+              ? new Set(state.ml_cluster.map(function (v) { return parseInt(v, 10); }))
+              : null;
     var zoneStates = null;
     if (state.zone && state.zone.length) {
       zoneStates = new Set();
@@ -68,7 +71,7 @@
         if (s) s.forEach(function (v) { zoneStates.add(v); });
       });
     }
-    if (!ra && !st && !cl && !zoneStates) return stores;
+    if (!ra && !st && !cl && !zoneStates && !mc) return stores;
     var out = [];
     for (var i = 0; i < stores.length; i++) {
       var s = stores[i];
@@ -76,6 +79,7 @@
       if (st && !st.has(s.st)) continue;
       if (zoneStates && !zoneStates.has(s.st)) continue;
       if (cl && !cl.has(s.cl)) continue;
+      if (mc && !mc.has(s.mr)) continue;
       out.push(s);
     }
     return out;
@@ -158,7 +162,7 @@
   function applyFilters(nextState) {
     currentFilters = nextState || {};
     var clearBtn = $('clear-all');
-    var anySelected = ['retailer','state','zone','cluster'].some(function (k) {
+    var anySelected = ['retailer','state','zone','cluster','ml_cluster'].some(function (k) {
       return Array.isArray(currentFilters[k]) && currentFilters[k].length > 0;
     });
     if (clearBtn) clearBtn.disabled = !anySelected;
@@ -177,8 +181,47 @@
     }, DEBOUNCE_MS);
   }
 
+  // Color-by mode: 'cluster' (class_of_trade, default) or 'ml_rank' (ML cluster rank)
+  var COLOR_BY = (function () {
+    try { return localStorage.getItem('colorBy') || 'cluster'; } catch (e) { return 'cluster'; }
+  })();
+
+  // Palette for ML rank (1..6). Matches the palette in cluster_meta.json.
+  var ML_RANK_PALETTE = {
+    1: [220, 53, 69], 2: [0, 123, 167], 3: [40, 167, 69],
+    4: [255, 159, 28], 5: [148, 103, 189], 6: [108, 117, 125],
+  };
+
+  function pinPalette() {
+    if (COLOR_BY === 'ml_rank') {
+      return {
+        kind: 'ml_rank',
+        get: function (s) { return ML_RANK_PALETTE[s.mr] || [108, 117, 125]; },
+      };
+    }
+    return null; // null means use map.js's default class_of_trade palette via 'cl'
+  }
+
+  function setColorBy(mode) {
+    COLOR_BY = mode;
+    try { localStorage.setItem('colorBy', mode); } catch (e) {}
+    var btn = $('color-toggle');
+    if (btn) btn.textContent = mode === 'ml_rank' ? 'Color: ML rank' : 'Color: class of trade';
+    if (window.MapViz && typeof window.MapViz.setColorMode === 'function') {
+      window.MapViz.setColorMode(pinPalette());
+    }
+    applyFilters(currentFilters);  // re-render
+  }
+
   function init() {
     wireMobileToggle();
+    var ctBtn = $('color-toggle');
+    if (ctBtn) {
+      ctBtn.textContent = COLOR_BY === 'ml_rank' ? 'Color: ML rank' : 'Color: class of trade';
+      ctBtn.addEventListener('click', function () {
+        setColorBy(COLOR_BY === 'ml_rank' ? 'cluster' : 'ml_rank');
+      });
+    }
     wireDownload();
     var clearBtn = $('clear-all');
     if (clearBtn) {
@@ -208,7 +251,12 @@
           schemaEl.classList.remove('hidden');
         }
         if (window.MapViz && typeof window.MapViz.init === 'function') {
-          try { window.MapViz.init({ container: $('map'), palette: PALETTE }); }
+          try {
+            window.MapViz.init({ container: $('map'), palette: PALETTE });
+            if (typeof window.MapViz.setColorMode === 'function') {
+              window.MapViz.setColorMode(pinPalette());
+            }
+          }
           catch (e) { showError('Map init failed: ' + e.message); }
         }
         if (window.Filters && typeof window.Filters.init === 'function') {

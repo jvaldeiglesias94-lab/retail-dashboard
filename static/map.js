@@ -27,6 +27,7 @@
   let _deck = null;
   let _palette = null;
   let _containerEl = null;
+  let _colorOverride = null;  // set by setColorMode({get(d)}); when present, takes precedence
 
   function _resolveContainer(c) {
     if (typeof c === 'string') return document.getElementById(c);
@@ -61,7 +62,8 @@
       radiusMinPixels: 5,
       radiusMaxPixels: 14,
       getPosition: d => [d.lo, d.la],
-      getFillColor: d => _colorFor(d.cl),
+      getFillColor: d => _colorOverride && typeof _colorOverride.get === 'function'
+        ? _colorOverride.get(d) : _colorFor(d.cl),
       updateTriggers: {
         getFillColor: [stores],
         getPosition:  [stores],
@@ -137,6 +139,12 @@
       return MapViz;
     },
 
+    setColorMode(mode) {
+      _colorOverride = mode || null;
+      // if there's a current layer, force a refresh by re-emitting with same data
+      // (caller should follow with update() to actually re-render)
+      return MapViz;
+    },
     _palette: DEFAULT_PALETTE,
     _colorFor: _colorFor,
   };

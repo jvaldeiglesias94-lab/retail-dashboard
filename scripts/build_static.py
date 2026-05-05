@@ -29,6 +29,7 @@ from data import (
     SCHEMA_VERSION,
     load_stores,
     stores_to_records,
+    get_meta,
 )
 
 OUT = ROOT / "static" / "data.json"
@@ -39,15 +40,8 @@ def main() -> None:
     df = load_stores()
     print(f"loaded parquet: {len(df)} rows", flush=True)
 
-    # Build meta payload (same shape as /api/meta)
-    meta = {
-        "retailers": sorted(df["retail_account"].dropna().unique().tolist()),
-        "states":    sorted(df["state"].dropna().unique().tolist()),
-        "zones":     ZONES,
-        "clusters":  sorted(df["cluster"].dropna().unique().tolist()),
-        "total_rows": int(len(df)),
-        "schema_version": SCHEMA_VERSION,
-    }
+    # Use the canonical /api/meta builder so ml_clusters etc. flow through.
+    meta = get_meta()
 
     # Convert all stores to short-key wire format. limit=None means all rows.
     stores = stores_to_records(df, limit=10**9)
