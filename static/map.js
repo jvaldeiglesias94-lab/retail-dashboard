@@ -116,6 +116,25 @@
 
       _map.addControl(new global.maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 
+      // Add US state borders (loaded from local GeoJSON)
+      _map.on('load', () => {
+        try {
+          _map.addSource('us-states', { type: 'geojson', data: 'us-states.geojson' });
+          _map.addLayer({
+            id: 'state-fills', type: 'fill', source: 'us-states',
+            paint: { 'fill-color': '#000', 'fill-opacity': 0.0 },
+          }, undefined);
+          _map.addLayer({
+            id: 'state-borders', type: 'line', source: 'us-states',
+            paint: {
+              'line-color': '#666',
+              'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.6, 6, 1.0, 8, 1.5],
+              'line-opacity': 0.55,
+            },
+          });
+        } catch (e) { console.warn('states layer not added:', e); }
+      });
+
       const { MapboxOverlay } = global.deck;
       _deck = new MapboxOverlay({ interleaved: false, layers: [] });
       _map.addControl(_deck);
